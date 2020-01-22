@@ -1,0 +1,6 @@
+[submodule "style-based-gan-pytorch"]
+	path = style-based-gan-pytorch
+	url = https://github.com/rosinality/style-based-gan-pytorch.git
+[submodule "stylegan2-pytorch"]
+	path = stylegan2-pytorch
+	url = https://github.com/rosinality/stylegan2-pytorch.git
