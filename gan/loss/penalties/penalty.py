@@ -32,7 +32,7 @@ class GradientDiscriminatorPenalty(DiscriminatorPenalty):
 
 
     @abstractmethod
-    def _compute(self, grad: Tensor) -> Loss: pass
+    def _compute(self, grad: List[Tensor]) -> Loss: pass
 
     def gradient_point(self, x: List[Tensor], y: List[Tensor]) -> List[Tensor]:
         eps = np.random.random_sample()
@@ -60,12 +60,7 @@ class GradientDiscriminatorPenalty(DiscriminatorPenalty):
                                    retain_graph=True,
                                    only_inputs=True)
 
-        if len(grads) == 1:
-            grad = grads[0]
-        else:
-            grad = torch.cat(grads, dim=1)
-
-        return self._compute(grad)
+        return self._compute(grads)
 
 
 class ApproxGradientDiscriminatorPenalty(DiscriminatorPenalty):

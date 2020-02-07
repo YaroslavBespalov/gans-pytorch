@@ -16,6 +16,7 @@ from gan.loss_base import Loss
 from optim.min_max import MinMaxParameters, MinMaxOptimizer, MinMaxLoss
 
 
+
 def gan_weights_init(net, init_type='xavier', gain=0.02):
     """Get different initial method for the network weights"""
     def init_func(m):
@@ -84,7 +85,15 @@ class GANModel:
 class ConditionalGANModel(GANModel):
 
     def loss_pair(self, real: List[Tensor], condition: Tensor, *noise: Tensor) -> MinMaxLoss:
-        return super().loss_pair(real, *([condition] + [*noise]))
+
+        fake = self.generator.forward(condition, *noise)
+
+        if not isinstance(fake, (list, tuple)):
+            fake = [fake]
+        return MinMaxLoss(
+            self.loss.generator_loss(real + [condition], fake + [condition]),
+            self.loss.discriminator_loss_with_penalty(real + [condition], fake + [condition])
+        )
 
     def generator_loss(self, real: List[Tensor], condition: Tensor, *noise: Tensor) -> Loss:
         return super().generator_loss(real, *([condition] + [*noise]))
@@ -92,8 +101,10 @@ class ConditionalGANModel(GANModel):
     def forward(self, condition: Tensor, *noise: Tensor):
         return super().forward(*([condition] + [*noise]))
 
-    def train(self, real: Tensor, condition: Tensor, *noise: Tensor):
-        return super().train(real, *([condition] + [*noise]))
+    def train(self, real: List[Tensor], condition: Tensor, *noise: Tensor):
+        loss = self.loss_pair(real, condition, *noise)
+        self.optimizer.train_step(loss)
+        return loss.min_loss.item(), loss.max_loss.item()
 
 
 name_to_gan_loss = {
@@ -117,6 +128,7 @@ class StyleGen2Wrapper(Generator):
                  ):
         super().__init__()
         self.gen: StyleGenerator2 = gen
+        self.preproc = nn.Identity()
 
         self.return_latents = return_latents
         self.inject_index = inject_index
@@ -126,9 +138,11 @@ class StyleGen2Wrapper(Generator):
         self.noise = noise
         self.randomize_noise = randomize_noise
 
-    def forward(self, style_target: Tensor, style_src: Tensor = None):
+    def forward(self, *input: Tensor):
 
-        styles = [style_target] if style_src is None else [style_target, style_src]
+        styles = self.preproc([*input])
+        if not isinstance(styles, list):
+            styles = [styles]
 
         img, _ = self.gen(styles,
                         self.return_latents,
@@ -148,8 +162,8 @@ class StyleDisc2Wrapper(Discriminator):
         super().__init__()
         self.disc = disc
         
-    def forward(self, img: Tensor):
-        return self.disc(img)
+    def forward(self, *img: Tensor):
+        return self.disc([*img])
 
 
 def stylegan2(path: str, loss_type: str, lr: float, noise=None) -> GANModel:
