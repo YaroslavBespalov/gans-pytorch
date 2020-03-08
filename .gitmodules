@@ -4,3 +4,6 @@
 [submodule "stylegan2-pytorch"]
 	path = stylegan2-pytorch
 	url = https://github.com/rosinality/stylegan2-pytorch.git
+[submodule "MUNIT"]
+	path = MUNIT
+	url = https://github.com/NVlabs/MUNIT.git

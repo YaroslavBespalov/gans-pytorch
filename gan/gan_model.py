@@ -6,18 +6,18 @@ from torch import Tensor, nn
 from torch.nn import init
 
 from dataset.probmeasure import ProbabilityMeasureFabric
-from gans_pytorch.gan.discriminator import Discriminator
-from gans_pytorch.gan.loss.hinge import HingeLoss
-from gans_pytorch.gan.loss.vanilla import DCGANLoss
-from gans_pytorch.gan.loss.wasserstein import WassersteinLoss
-from gans_pytorch.stylegan2_pytorch.model import Generator as StyleGenerator2, EqualLinear, ConvLayer, PixelNorm
-from gans_pytorch.stylegan2_pytorch.model import Discriminator as StyleDiscriminator2
-from gans_pytorch.gan.generator import Generator
-from gans_pytorch.gan.loss.gan_loss import GANLoss
-from gans_pytorch.gan.loss_base import Loss
-from gans_pytorch.optim.min_max import MinMaxParameters, MinMaxOptimizer, MinMaxLoss
 from modules.lambdaf import LambdaF
 from modules.uptosize import Uptosize, MakeNoise
+from gan.discriminator import Discriminator
+from gan.loss.hinge import HingeLoss
+from gan.loss.vanilla import DCGANLoss
+from gan.loss.wasserstein import WassersteinLoss
+from stylegan2_pytorch.model import Generator as StyleGenerator2, EqualLinear, ConvLayer
+from stylegan2_pytorch.model import Discriminator as StyleDiscriminator2
+from gan.generator import Generator
+from gan.loss.gan_loss import GANLoss
+from gan.loss_base import Loss
+from optim.min_max import MinMaxParameters, MinMaxOptimizer, MinMaxLoss
 
 
 def gan_weights_init(net, init_type='xavier', gain=0.02):

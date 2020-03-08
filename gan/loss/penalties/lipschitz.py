@@ -13,18 +13,11 @@ class LipschitzPenalty(GradientDiscriminatorPenalty):
         super().__init__(mix)
         self.weight = weight
 
-    # def _compute(self, gradients: Tensor) -> Loss:
-    #
-    #     gradients: Tensor = gradients.view((gradients.size(0), -1))
-    #     gradient_penalty_value = ((gradients.norm(2, dim=1) - 1)**2).mean()
-    #     return Loss(self.weight * gradient_penalty_value)
-
     def _compute(self, gradients: List[Tensor]) -> Loss:
         gradients_cat = torch.cat([g.view(g.size(0), -1) for g in gradients], dim=1)
         # gradients: Tensor = gradients.view((gradients.size(0), -1))
         gradient_penalty_value = ((gradients_cat.norm(2, dim=1) - 1)**2).mean()
         return Loss(self.weight * gradient_penalty_value)
-
 
 
 class ApproxLipschitzPenalty(ApproxGradientDiscriminatorPenalty):

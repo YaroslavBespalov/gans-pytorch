@@ -1,7 +1,6 @@
 from torch import nn, Tensor
 
-from framework.gan.generator import Generator as G
-from framework.gan.noise import Noise
+from gan.generator import Generator as G
 
 
 class EGenerator(G):
@@ -12,12 +11,12 @@ class EGenerator(G):
     def __init__(self, size):
         super(EGenerator, self).__init__()
         n_out = 2
-        ngf = 32
+        ngf = 64
         self.main = nn.Sequential(
             nn.Linear(size, ngf),
-            nn.ReLU(True),
+            nn.LeakyReLU(0.2, True),
             nn.Linear(ngf,  2 * ngf),
-            nn.Tanh(),
+            nn.LeakyReLU(0.2, True),
             nn.Linear(2 * ngf, n_out)
         )
 

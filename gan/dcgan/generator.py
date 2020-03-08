@@ -1,13 +1,10 @@
 import math
-
 from torch import Tensor, nn
-
-from framework.gan.generator import Generator as G
-from framework.gan.noise import Noise
-from framework.nn.modules.common.View import View
-from framework.nn.modules.common.self_attention import SelfAttention2d
-from framework.nn.modules.resnet.residual import Up2xResidualBlock, PaddingType
-from useful_utils.spectral_functions import spectral_norm_init
+from gan.generator import Generator as G
+from gan.noise import Noise
+from models.attention import SelfAttention2d
+from models.common import View
+from models.resnet.residual import Up2xResidualBlock, PaddingType
 
 
 class DCGenerator(G):
@@ -19,9 +16,9 @@ class DCGenerator(G):
         nc = 3
 
         layers = [
-            spectral_norm_init(nn.ConvTranspose2d(noise_size, ngf * 8, 4, 1, 0, bias=False)),
-            nn.BatchNorm2d(ngf * 8),
-            nn.ReLU(True),
+            nn.ConvTranspose2d(noise_size, ngf * 8, 4, 1, 0, bias=False),
+            nn.InstanceNorm2d(ngf * 8),
+            nn.LeakyReLU(0.2, True),
         ]
 
         nc_l_next = -1
@@ -31,9 +28,9 @@ class DCGenerator(G):
             nc_l_next = max(ngf, nc_l // 2)
 
             layers += [
-                spectral_norm_init(nn.ConvTranspose2d(nc_l, nc_l_next, 4, stride=2, padding=1, bias=False)),
-                nn.BatchNorm2d(nc_l_next),
-                nn.ReLU(True),
+                nn.ConvTranspose2d(nc_l, nc_l_next, 4, stride=2, padding=1, bias=False),
+                nn.InstanceNorm2d(nc_l_next),
+                nn.LeakyReLU(0.2, True),
             ]
 
             if l == 2:
@@ -61,10 +58,10 @@ class ResDCGenerator(G):
         nc = 3
 
         layers = [
-            spectral_norm_init(nn.Linear(noise_size, noise_size, bias=False)),
+            nn.Linear(noise_size, noise_size, bias=False),
             View(-1, noise_size, 1, 1),
-            spectral_norm_init(nn.ConvTranspose2d(noise_size, ngf * 8, 4, 1, 0, bias=False)),
-            nn.BatchNorm2d(ngf * 8),
+            nn.ConvTranspose2d(noise_size, ngf * 8, 4, 1, 0, bias=False),
+            nn.InstanceNorm2d(ngf * 8),
             nn.ReLU(True),
         ]
 
@@ -75,7 +72,7 @@ class ResDCGenerator(G):
             nc_l_next = max(ngf, nc_l // 2)
 
             layers += [
-                Up2xResidualBlock(nc_l, nc_l_next, PaddingType.REFLECT, nn.BatchNorm2d, use_spectral_norm=True)
+                Up2xResidualBlock(nc_l, nc_l_next, PaddingType.REFLECT, nn.InstanceNorm2d, use_spectral_norm=False)
             ]
 
             if l == 2:

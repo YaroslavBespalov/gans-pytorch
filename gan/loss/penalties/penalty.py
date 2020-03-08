@@ -20,7 +20,7 @@ class DiscriminatorPenalty(ABC):
             y: List[Tensor]) -> Loss: pass
 
 def default_mix(x: Tensor, y: Tensor):
-    eps = np.random.random_sample()
+    eps = torch.rand([x.shape[0]] + [1]*(len(x.shape)-1), device=x.device)
     x0: Tensor = (x * eps + y * (1 - eps))
     return x0
 
@@ -59,11 +59,6 @@ class GradientDiscriminatorPenalty(DiscriminatorPenalty):
                                    create_graph=True,
                                    retain_graph=True,
                                    only_inputs=True)
-
-        # if len(grads) == 1:
-        #     grad = grads[0]
-        # else:
-        #     grad = torch.cat(grads, dim=1)
 
         return self._compute(grads)
 
