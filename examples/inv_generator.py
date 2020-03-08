@@ -3,6 +3,8 @@ from torch.utils import data
 from torchvision.datasets import ImageFolder
 from torchvision.transforms import transforms
 
+from gan.gan_model import stylegan2
+from optim.min_max import MinMaxParameters, MinMaxOptimizer
 from style_based_gan_pytorch.model import StyledGenerator, ConvBlock, EqualLinear
 import argparse
 import math
@@ -85,114 +87,50 @@ if __name__ == '__main__':
     parser.add_argument('--size', type=int, default=256, help='size of the image')
     parser.add_argument('path', type=str, help='path to checkpoint file')
 
-    batch = 12
+    batch = 4
 
     args = parser.parse_args()
+    size = 256
 
     device = 'cuda'
 
-    generator = StyledGenerator(512).to(device)
-    generator.load_state_dict(torch.load(args.path)['g_running'])
-    generator.eval()
-
-    generator_train = StyledGenerator(512).to(device)
-    generator_train.load_state_dict(torch.load(args.path)['g_running'])
-    generator_train.train()
-
-    mean_style = get_mean_style(generator, device)
-
+    noise = []
     step = int(math.log(args.size, 2)) - 2
 
-    # z, img = sample(generator, step, mean_style, batch, device)
-
-    # print(z.shape)
-
-    noise = []
-
-    for i in range(step + 1):
-        size = 4 * 2 ** i
-        noise.append(torch.zeros(batch, 1, size, size, device=device))
-
-    inv_gen = InvGenarator().to(device)
-
-    inv_gen = nn.DataParallel(inv_gen)
-
-    opt = optim.Adam(inv_gen.parameters(), lr=0.001)
-    opt_gen = optim.Adam(generator_train.parameters(), lr=0.0001)
+    gan_model = stylegan2("/home/ibespalov/stylegan2/stylegan2-pytorch/checkpoint/130000.pt", "wasserstein", 0.0001)
+    params = MinMaxParameters(gan_model.generator.gen.parameters(), gan_model.loss.discriminator.disc.final_linear.parameters())
+    gan_model.optimizer = MinMaxOptimizer(params, 0.0001, 0.0004)
 
     transform = transforms.Compose(
         [
             transforms.Resize((size, size)),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomAffine(degrees=5, scale=(1, 1.2)),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5), inplace=True),
         ]
     )
 
     dataset = ImageFolder("../../face", transform)
-    loader = data.DataLoader(dataset, batch_size=batch)
+    loader = data.DataLoader(dataset, batch_size=batch, shuffle=True)
 
-    mariya, _ = iter(loader).__next__()
-    mariya = mariya.to(device)
+    for epoch in range(1000):
+        print(epoch)
 
-    for i in range(10000):
+        for i, (img, label) in enumerate(loader):
+            img = img.cuda()
 
-        z, img = sample(generator, step, mean_style, batch, device, noise)
-        img = img.detach()
-        z_pred = inv_gen(img)
+            z = torch.randn(img.shape[0], 512).to(device)
+            loss_g, loss_d = gan_model.train([img], z)
 
-        img_pred = generator_train(
-            [z_pred, z_pred],
-            step=step,
-            alpha=1,
-            mean_style=mean_style,
-            style_weight=0.7,
-            noise=noise
-        )
+        if epoch % 10 == 0:
 
-        loss = nn.L1Loss()(img_pred, img.detach())
+                with torch.no_grad():
 
-        generator_train.zero_grad()
-        inv_gen.zero_grad()
-        loss.backward()
-        opt.step()
-        opt_gen.step()
+                    z = torch.randn(batch, 512).to(device)
+                    mariya_pred = gan_model.forward(z)
 
-        if i % 10 == 0:
-            z_m = inv_gen(mariya)
-
-            mariya_pred = generator_train(
-                [z_m, z_m],
-                step=step,
-                alpha=1,
-                mean_style=mean_style,
-                style_weight=0.7,
-                noise=noise
-            )
-
-            loss = nn.L1Loss()(mariya_pred, mariya.detach())
-
-            generator_train.zero_grad()
-            inv_gen.zero_grad()
-            loss.backward()
-            opt.step()
-            opt_gen.step()
-
-        if i % 100 == 0:
-            print(i, loss.item())
-
-            with torch.no_grad():
-                z_m = inv_gen(mariya)
-
-                mariya_pred = generator_train(
-                    [z_m, z_m],
-                    step=step,
-                    alpha=1,
-                    mean_style=mean_style,
-                    style_weight=0.7,
-                    noise=noise
-                )
-
-                utils.save_image(
-                    torch.cat([mariya, mariya_pred], 0), f'sample_inv.png', nrow=batch, normalize=True, range=(-1, 1)
-                )
+                    utils.save_image(
+                        mariya_pred, f'sample_inv.png', nrow=batch, normalize=True, range=(-1, 1)
+                    )
 

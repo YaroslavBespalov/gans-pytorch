@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 
-from framework.gan.noise.Noise import Noise
+from noise.Noise import Noise
 
 
 class NormalNoise(Noise):

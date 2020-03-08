@@ -55,5 +55,24 @@ class MinMaxOptimizer:
         for i in self.opt_min.param_groups:
             i['lr'] *= scale
 
+    def add_param_group(self, params, lr):
+        if params[0] is not None:
+            self.opt_min.add_param_group(
+                {
+                    'params': params[0],
+                    'lr': lr[0]
+                }
+            )
+
+        if params[1] is not None:
+            self.opt_max.add_param_group(
+                {
+                    'params': params[1],
+                    'lr': lr[1]
+                }
+            )
+
+        return self
+
 
 
