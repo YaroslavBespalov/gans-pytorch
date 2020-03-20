@@ -1,11 +1,12 @@
 from itertools import chain
-from typing import List, Dict, Callable
+from typing import List, Dict, Callable, Tuple
 
 import torch
 from torch import Tensor, nn
 from torch.nn import init
 
 from dataset.probmeasure import ProbabilityMeasureFabric
+from metrics.writers import send_to_tensorboard
 from modules.lambdaf import LambdaF
 from modules.uptosize import Uptosize, MakeNoise
 from gan.discriminator import Discriminator
@@ -167,10 +168,10 @@ class StyleDisc2Wrapper(Discriminator):
         self.disc = disc
         
     def forward(self, *img: Tensor):
-        return self.disc([*img])
+        return self.disc(*img)
 
 
-def stylegan2(path: str, loss_type: str, lr: float) -> GANModel:
+def stylegan2(path: str, loss_type: str, lr: float, pretrained_disc=False) -> GANModel:
 
     state_dict = torch.load(path)
 
@@ -179,7 +180,8 @@ def stylegan2(path: str, loss_type: str, lr: float) -> GANModel:
     generator = StyleGen2Wrapper(generator).cuda()
 
     discriminator: StyleDiscriminator2 = StyleDiscriminator2(256, 2)
-    discriminator.load_state_dict(state_dict['d'])
+    if pretrained_disc:
+        discriminator.load_state_dict(state_dict['d'])
     discriminator = StyleDisc2Wrapper(discriminator).cuda()
 
     loss: GANLoss = name_to_gan_loss[loss_type](discriminator)
@@ -187,15 +189,15 @@ def stylegan2(path: str, loss_type: str, lr: float) -> GANModel:
     return GANModel(generator, loss, lr, do_init_ws=False)
 
 
-def stylegan2_cond_transfer(path: str, loss_type: str, lr: float, size1: int, size2: int, image_size: int) -> GANModel:
+def stylegan2_cond_transfer(path: str, loss_type: str, lr: float, size1: int, size2: int, image_size: int) -> ConditionalGANModel:
 
-    gan_model = stylegan2(path, loss_type, lr)
+    gan_model = stylegan2(path, loss_type, lr, pretrained_disc=False)
 
     class GanPreproc(nn.Module):
         def __init__(self):
             super().__init__()
 
-            lr_mlp = 2.0
+            lr_mlp = 0.1
 
             self.style1 = nn.Sequential(
                 # PixelNorm(),
@@ -210,7 +212,7 @@ def stylegan2_cond_transfer(path: str, loss_type: str, lr: float, size1: int, si
                 EqualLinear(256, 512, lr_mul=lr_mlp, activation='fused_lrelu'))
 
             self.noise = MakeNoise(7, size1)
-            self.noise.apply(gan_weights_init)
+            # self.noise.apply(gan_weights_init)
 
         def forward(self, cond: Tensor, z: Tensor):
             noise = self.noise(cond)
@@ -223,12 +225,12 @@ def stylegan2_cond_transfer(path: str, loss_type: str, lr: float, size1: int, si
 
     netD = gan_model.loss.discriminator
 
-    fabric = ProbabilityMeasureFabric(image_size)
+    # fabric = ProbabilityMeasureFabric(image_size)
 
     netD.disc.convs = nn.Sequential(
-        LambdaF(Uptosize(size1, 1, image_size),
-                lambda module, img, cond: torch.cat([fabric.from_channels(cond).toImage(image_size), img], dim=1)),
-        ConvLayer(4, 128, 1),
+        LambdaF(Uptosize(size1, 5, image_size),
+                lambda module, img, cond: torch.cat([img, module(cond)], dim=1)),
+        ConvLayer(8, 128, 1),
         netD.disc.convs[1:]
     ).cuda()
 
@@ -250,6 +252,53 @@ def stylegan2_cond_transfer(path: str, loss_type: str, lr: float, size1: int, si
         )
 
     return cond_gan_model
+
+
+def stylegan2_transfer(path: str, loss_type: str, lr: float, size1: int, size2: int) -> GANModel:
+
+    gan_model = stylegan2(path, loss_type, lr, pretrained_disc=True)
+
+    class GanPreproc(nn.Module):
+        def __init__(self):
+            super().__init__()
+
+            lr_mlp = 0.05
+
+            self.style1 = nn.Sequential(
+                # PixelNorm(),
+                EqualLinear(size1, 256, lr_mul=lr_mlp, activation='fused_lrelu'),
+                EqualLinear(256, 256, lr_mul=lr_mlp, activation='fused_lrelu'),
+                EqualLinear(256, 512, lr_mul=lr_mlp, activation='fused_lrelu'))
+
+            self.style2 = nn.Sequential(
+                # PixelNorm(),
+                EqualLinear(size2, 256, lr_mul=lr_mlp, activation='fused_lrelu'),
+                EqualLinear(256, 256, lr_mul=lr_mlp, activation='fused_lrelu'),
+                EqualLinear(256, 512, lr_mul=lr_mlp, activation='fused_lrelu'))
+
+            self.noise = MakeNoise(7, size1)
+            # self.noise.apply(gan_weights_init)
+
+        def forward(self, cond: Tensor, z: Tensor):
+            noise = self.noise(cond)
+            return [self.style1(cond), self.style2(torch.cat([cond, z], dim=1))], noise
+
+    netG = gan_model.generator
+    netG.preproc = GanPreproc().cuda()
+    netG.inject_index = 2
+    netG.input_is_latent = True
+
+    # netD = gan_model.loss.discriminator
+
+    params = MinMaxParameters(gan_model.generator.preproc.parameters(),
+                              gan_model.loss.discriminator.parameters())
+
+    gan_model.optimizer = MinMaxOptimizer(params, 0.001, 0.001) \
+        .add_param_group(
+           (gan_model.generator.gen.parameters(), None), (0.0005, None)
+        )
+
+    return gan_model
 
 
 
